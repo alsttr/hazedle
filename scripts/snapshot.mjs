@@ -32,29 +32,39 @@ const RETRY_EVERY = 2 * MIN; // re-poll a camera whose frame isn't inside the ho
 const PHOTO_CUTOFF = 1 * MIN; // stop trying for photos this long before the hour ends
 const READING_DEADLINE = 70 * MIN; // after the hour ends, give up waiting for NEA
 
-// Ordered by preference; the first camera with a frame inside the hour wins.
+// Only cameras that look out to a horizon (not down at a road), so the haze is judgeable.
+// Each round tries a region's cameras in a different order, so the view can change from
+// round to round; the first with a frame inside the hour wins.
+const LTA = 'LTA traffic camera via data.gov.sg';
 const CAMERAS = {
   north: [
-    { kind: 'lta', id: '2701', place: 'Woodlands Causeway', credit: 'LTA traffic camera via data.gov.sg' },
-    { kind: 'lta', id: '2702', place: 'Woodlands Checkpoint', credit: 'LTA traffic camera via data.gov.sg' },
-    { kind: 'lta', id: '2704', place: 'Woodlands Ave 3', credit: 'LTA traffic camera via data.gov.sg' },
+    { kind: 'lta', id: '2701', place: 'Woodlands Causeway', credit: LTA },
+    { kind: 'lta', id: '2702', place: 'Woodlands Checkpoint', credit: LTA },
   ],
   south: [
-    { kind: 'lta', id: '4799', place: 'Sentosa Gateway', credit: 'LTA traffic camera via data.gov.sg' },
-    { kind: 'lta', id: '4798', place: 'Sentosa Gateway', credit: 'LTA traffic camera via data.gov.sg' },
+    // 4799 (also Sentosa Gateway) points down at the road, so it's left out.
+    { kind: 'lta', id: '4798', place: 'Sentosa Gateway, towards Mount Faber', credit: LTA },
   ],
   east: [
     { kind: 'rtspme', id: 'iBdQrE7r', place: 'Changi Sailing Club', credit: 'Changi Sailing Club weather camera' },
   ],
   west: [
-    { kind: 'lta', id: '4703', place: 'Tuas Second Link', credit: 'LTA traffic camera via data.gov.sg' },
-    { kind: 'lta', id: '4713', place: 'Tuas Checkpoint', credit: 'LTA traffic camera via data.gov.sg' },
-    { kind: 'lta', id: '4712', place: 'AYE towards Tuas', credit: 'LTA traffic camera via data.gov.sg' },
+    { kind: 'lta', id: '4703', place: 'Tuas Second Link', credit: LTA },
+    { kind: 'lta', id: '4713', place: 'Tuas Checkpoint', credit: LTA },
   ],
   central: [
     { kind: 'windy', id: '1369190454', place: 'Sin Ming (Midview City)', credit: 'Midview City webcam via Windy.com' },
   ],
 };
+// Deterministic shuffle per round, so a retried run picks the same order.
+function orderFor(list, seed) {
+  let h = 2166136261;
+  for (const ch of seed) h = Math.imul(h ^ ch.charCodeAt(0), 16777619) >>> 0;
+  return list
+    .map((c, i) => ({ c, k: Math.imul(h ^ (i + 1) * 2654435761, 2246822519) >>> 0 }))
+    .sort((a, b) => a.k - b.k)
+    .map((x) => x.c);
+}
 const REGIONS = ['north', 'south', 'east', 'west', 'central'];
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, Math.max(0, ms)));
@@ -115,7 +125,7 @@ async function rtspme(id) {
 const FETCHERS = { lta, windy, rtspme };
 
 // Photos for every region, each taken inside [from, to). Retries until the cutoff.
-async function takePhotos(from, to) {
+async function takePhotos(from, to, seed) {
   const shots = {};
   const cutoff = to - PHOTO_CUTOFF;
   // Too early for this hour (manual run): wait until frames from it can exist.
@@ -127,7 +137,7 @@ async function takePhotos(from, to) {
   while (true) {
     for (const region of REGIONS) {
       if (shots[region]) continue;
-      for (const cam of CAMERAS[region]) {
+      for (const cam of orderFor(CAMERAS[region], seed + region)) {
         try {
           const { buf, reportedAt, lag, source } = await FETCHERS[cam.kind](cam.id, from, to);
           const takenAt = reportedAt - lag; // earliest it could have been taken
@@ -213,7 +223,7 @@ async function main() {
   console.log(`Round ${id}: photos must be from ${sgtTime(hourFrom)}-${sgtTime(stamp)} SGT, scored on NEA's ${neaStamp(stamp)} reading`);
   if (!FORCE && (await reuseLive(id))) return;
 
-  const shots = await takePhotos(hourFrom, stamp);
+  const shots = await takePhotos(hourFrom, stamp, id);
   const { readings, at, issuedAt } = await readingFor(stamp);
 
   const regions = REGIONS.map((region) => {

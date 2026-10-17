@@ -2,66 +2,87 @@
   'use strict';
 
   const REGIONS = ['north', 'south', 'east', 'west', 'central'];
-  const MAX_PTS = 200;
+  const MAX_PTS = 100;
   const ZERO_AT = Math.log(2.5); // off by 2.5x either way scores nothing
   const SLIDER_MAX = 350;
   const GUESS_MAX = 600;
-  const KEY = 'hazedle:v1';
+  const KEY = 'hazedle:v2'; // v1 scored out of 200 per region
   const URL_SELF = location.origin + location.pathname;
+  // Shared scores (Supabase). The publishable key is meant to be public; the table is only
+  // reachable through the hazedle_submit / hazedle_stats functions.
+  const API = 'https://edvmiplelrueckisnumm.supabase.co/rest/v1/rpc/';
+  const API_KEY = 'sb_publishable_DLUL_VqHLWgCOmo2ANGwJQ_r6yJXhMz';
 
   const $ = (id) => document.getElementById(id);
-  const el = {
-    roundLabel: $('roundLabel'), steps: $('steps'), play: $('play'), done: $('done'), error: $('error'),
-    photo: $('photo'), photoBtn: $('photoBtn'), offline: $('offline'), regionTag: $('regionTag'), place: $('place'), credit: $('credit'),
-    guessPanel: $('guessPanel'), slider: $('slider'), guessOut: $('guessOut'), guessBand: $('guessBand'), lockBtn: $('lockBtn'),
-    revealPanel: $('revealPanel'), actual: $('actual'), actualBand: $('actualBand'), yours: $('yours'), pts: $('pts'),
-    markYou: $('markYou'), markReal: $('markReal'), verdict: $('verdict'), nextBtn: $('nextBtn'),
-    total: $('total'), grid: $('grid'), rows: $('rows'), shareBtn: $('shareBtn'), tweetBtn: $('tweetBtn'), actualLabel: $('actualLabel'), toast: $('toast'), nextRound: $('nextRound'),
-    sPlayed: $('sPlayed'), sAvg: $('sAvg'), sBest: $('sBest'), sStreak: $('sStreak'),
-    help: $('help'), helpBtn: $('helpBtn'), zoom: $('zoom'), zoomImg: $('zoomImg'),
-  };
+  const el = {};
+  ['roundLabel', 'intro', 'startBtn', 'introCount', 'game', 'steps', 'play', 'done', 'error',
+   'photo', 'photoBtn', 'offline', 'regionTag', 'place', 'credit',
+   'guessPanel', 'slider', 'guessOut', 'guessBand', 'lockBtn',
+   'revealPanel', 'yours', 'actual', 'actualBand', 'scoreCell', 'pts', 'markYou', 'markReal', 'verdict', 'actualLabel', 'nextBtn',
+   'total', 'mood', 'grid', 'curveBox', 'pct', 'curve', 'doneCount', 'rows', 'tweetBtn', 'shareBtn', 'toast', 'nextRound',
+   'sPlayed', 'sAvg', 'sBest', 'sStreak', 'help', 'helpBtn', 'zoom', 'zoomImg'].forEach((id) => (el[id] = $(id)));
 
   // ---- storage (never fatal) ----
   const load = () => { try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch { return {}; } };
   const save = (s) => { try { localStorage.setItem(KEY, JSON.stringify(s)); } catch {} };
   let store = load();
   store.rounds ||= {};
+  store.player ||= (crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-8xxx-xxxxxxxxxxxx'.replace(/x/g, () => ((Math.random() * 16) | 0).toString(16)));
+  save(store);
 
   // ---- helpers ----
   const unhide = (s) => JSON.parse(atob(s.split('').reverse().join('')));
   const band = (v) =>
-    v <= 55 ? { name: 'Normal', c: 'var(--b0)', i: 0 } :
-    v <= 150 ? { name: 'Elevated', c: 'var(--b1)', i: 1 } :
-    v <= 250 ? { name: 'High', c: 'var(--b2)', i: 2 } :
-               { name: 'Very high', c: 'var(--b3)', i: 3 };
+    v <= 55 ? { name: 'Normal', c: 'var(--b0)' } :
+    v <= 150 ? { name: 'Elevated', c: 'var(--b1)' } :
+    v <= 250 ? { name: 'High', c: 'var(--b2)' } :
+               { name: 'Very high', c: 'var(--b3)' };
   const setBand = (node, v) => { const b = band(v); node.textContent = b.name; node.style.setProperty('--c', b.c); };
   const score = (guess, actual) => {
     const err = Math.abs(Math.log((guess + 5) / (actual + 5)));
     return Math.round(MAX_PTS * Math.max(0, 1 - err / ZERO_AT));
   };
-  const tier = (p) => (p >= 160 ? 4 : p >= 100 ? 3 : p >= 40 ? 2 : 1);
+  const tier = (p) => (p >= 80 ? 4 : p >= 50 ? 3 : p >= 20 ? 2 : 1);
+  const TIER_COLOR = { 4: 'var(--b0)', 3: 'var(--b1)', 2: 'var(--b2)', 1: 'var(--b3)' };
   const EMOJI = { 4: '🟩', 3: '🟨', 2: '🟧', 1: '🟥' };
-  // 🎯 within 2 µg/m³, ⬆️ guessed too high, ⬇️ guessed too low
   const arrow = (g, a) => (Math.abs(g - a) <= 2 ? '🎯' : g > a ? '⬆️' : '⬇️');
-  const mood = (t) => (t >= 900 ? '🏆' : t >= 750 ? '😎' : t >= 550 ? '🙂' : t >= 350 ? '😶‍🌫️' : '😷');
+  const mood = (t) => (t >= 450 ? '🏆' : t >= 375 ? '😎' : t >= 275 ? '🙂' : t >= 175 ? '😶‍🌫️' : '😷');
   const pct = (v) => Math.min(100, (v / SLIDER_MAX) * 100) + '%';
   const sgt = (iso, opts) => new Date(iso).toLocaleString('en-SG', { timeZone: 'Asia/Singapore', ...opts });
   const hourName = (iso) => sgt(iso, { hour: 'numeric', hour12: true }).replace(' ', '').toLowerCase();
   const dayName = (iso, weekday = true) => sgt(iso, { ...(weekday && { weekday: 'short' }), day: 'numeric', month: 'short' });
   const roundName = (r) => `${dayName(r.startsAt)}, ${hourName(r.startsAt)} round`;
-  // The reading a round is scored on averages the hour before the round starts.
-  const readingHour = (r) => {
-    const to = r.hourTo || r.startsAt;
-    const from = r.hourFrom || new Date(Date.parse(to) - 3600e3).toISOString();
-    return { from, to, label: `${hourName(from).replace(/[ap]m$/, (m) => (hourName(from).slice(-2) === hourName(to).slice(-2) ? '' : m))}–${hourName(to)}` };
+  const hourRange = (r) => {
+    const from = hourName(r.hourFrom), to = hourName(r.hourTo);
+    return (from.slice(-2) === to.slice(-2) ? from.slice(0, -2) : from) + '–' + to;
   };
-  const verdictFor = (p, g, a) => {
-    if (p === MAX_PTS) return 'Bang on. Are you an NEA sensor?';
-    if (p >= 170) return 'So close. You can practically taste it.';
-    if (p >= 120) return g > a ? 'A bit pessimistic, but not far off.' : 'A touch optimistic, but not far off.';
-    if (p >= 60) return g > a ? 'Hazier in your head than in the air.' : 'Hazier out there than it looks.';
-    return g > a ? 'Way too gloomy. The air was kinder than that.' : 'Way off. That haze is sneakier than it looks.';
+  const plural = (n, w) => `${n.toLocaleString('en-SG')} ${w}${n === 1 ? '' : 's'}`;
+
+  const LINES = {
+    perfect: ["You're a walking NEA haze meter.", 'Did you just lick the air?', 'Are you secretly an air purifier?', 'Bang on. NEA wants to know your location.'],
+    great: ['Your lungs are very well calibrated.', 'Haze whisperer behaviour.', 'So close you can taste it. Literally.', 'Certified sniff test.'],
+    over: ['Bit dramatic. The air’s not that bad.', 'Calm down, it’s not 2015.', 'You saw grey and panicked.', 'Your N95 is showing.'],
+    under: ['Optimist! It’s hazier than it looks.', 'Your eyes are kinder than the air.', 'Main character energy, but your lungs disagree.', 'Rose-tinted glasses detected.'],
+    wayOver: ['Did you rate the photo or your anxiety?', 'That’s apocalypse-level. Touch grass (with a mask).', 'Were you looking at Jakarta?'],
+    wayUnder: ['Have you tried wiping your glasses?', 'That’s clean-air-in-Switzerland territory.', 'Bold of you to assume we can breathe.'],
   };
+  const pick = (list, seed) => list[Math.abs(seed) % list.length];
+  const verdictFor = (p, g, a, seed) => {
+    if (p >= 97) return pick(LINES.perfect, seed);
+    if (p >= 80) return pick(LINES.great, seed);
+    if (p >= 30) return pick(g > a ? LINES.over : LINES.under, seed);
+    return pick(g > a ? LINES.wayOver : LINES.wayUnder, seed);
+  };
+
+  async function rpc(fn, body) {
+    const r = await fetch(API + fn, {
+      method: 'POST',
+      headers: { apikey: API_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) throw new Error(fn + ' ' + r.status);
+    return r.json();
+  }
 
   // ---- state ----
   let round, answers, rs; // rs = this round's saved progress
@@ -95,8 +116,7 @@
       el.offline.hidden = false;
       el.photoBtn.disabled = true;
     }
-    const g = rs.guesses[r];
-    if (g != null) return reveal(false);
+    if (rs.guesses[r] != null) return reveal(false);
     el.guessPanel.hidden = false;
     el.revealPanel.hidden = true;
     setGuess(rs.draft ?? 80);
@@ -112,8 +132,7 @@
   }
 
   function lockIn() {
-    const r = REGIONS[rs.step];
-    rs.guesses[r] = rs.draft;
+    rs.guesses[REGIONS[rs.step]] = rs.draft;
     save(store);
     reveal(true);
   }
@@ -124,22 +143,26 @@
     el.guessPanel.hidden = true;
     el.revealPanel.hidden = false;
     el.yours.textContent = g;
-    el.pts.textContent = `+${p} pts`;
     setBand(el.actualBand, a);
-    el.verdict.textContent = verdictFor(p, g, a);
+    el.scoreCell.style.setProperty('--c', TIER_COLOR[tier(p)]);
+    el.verdict.textContent = verdictFor(p, g, a, rs.step * 7 + g + a);
     el.nextBtn.textContent = rs.step === REGIONS.length - 1 ? 'See my score' : `Next: ${REGIONS[rs.step + 1]}`;
     renderSteps();
     if (animate) {
       el.markReal.style.left = el.markYou.style.left = pct(g);
+      el.scoreCell.classList.remove('pop');
       const t0 = performance.now();
       const tick = (t) => {
         const k = Math.min(1, (t - t0) / 700), e = 1 - Math.pow(1 - k, 3);
         el.actual.textContent = Math.round(g + (a - g) * e);
+        el.pts.textContent = Math.round(p * e);
         if (k < 1) requestAnimationFrame(tick);
+        else el.scoreCell.classList.add('pop');
       };
       requestAnimationFrame(() => { el.markReal.style.left = pct(a); requestAnimationFrame(tick); });
     } else {
       el.actual.textContent = a;
+      el.pts.textContent = p;
       el.markYou.style.left = pct(g);
       el.markReal.style.left = pct(a);
     }
@@ -152,33 +175,94 @@
       rs.step++;
       save(store);
       showRegion();
-      el.photoBtn.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      el.steps.scrollIntoView({ behavior: 'smooth', block: 'start' });
     } else {
       finish();
     }
   }
 
   function finish() {
+    const scores = REGIONS.map((r) => score(rs.guesses[r], answers[r]));
     if (!rs.finished) {
       rs.finished = true;
-      rs.total = REGIONS.reduce((s, r) => s + score(rs.guesses[r], answers[r]), 0);
+      rs.total = scores.reduce((s, x) => s + x, 0);
       save(store);
     }
     el.play.hidden = true;
     el.done.hidden = false;
     renderSteps();
     el.total.textContent = rs.total;
+    el.mood.textContent = mood(rs.total);
     el.grid.textContent = gridText();
-    el.rows.innerHTML = REGIONS.map((r) => {
-      const g = rs.guesses[r], a = answers[r];
-      return `<li><span class="r">${r}</span><span class="d">guessed ${g}, actual ${a}</span><span class="p">${score(g, a)}</span></li>`;
+    el.rows.innerHTML = REGIONS.map((r, i) => {
+      const g = rs.guesses[r], a = answers[r], p = scores[i];
+      return `<li><span class="r">${r}</span><span class="d">you ${g} · actual ${a}</span><span class="p" style="--c:${TIER_COLOR[tier(p)]}">${p}</span></li>`;
     }).join('');
     renderStats();
     tickNext();
+    loadCurve(scores);
+    window.scrollTo({ top: 0 });
+  }
+
+  // ---- the curve: where this score sits among everyone's ----
+  async function loadCurve(scores) {
+    try {
+      const s = rs.submitted
+        ? await rpc('hazedle_stats', { p_round: round.id, p_total: rs.total })
+        : await rpc('hazedle_submit', { p_round: round.id, p_player: store.player, p_scores: scores });
+      if (!rs.submitted) { rs.submitted = true; save(store); }
+      drawCurve(s);
+    } catch {
+      // Older round (no longer open) or offline: try read-only stats.
+      try { drawCurve(await rpc('hazedle_stats', { p_round: round.id, p_total: rs.total })); } catch {}
+    }
+  }
+
+  function drawCurve(s) {
+    // A thin round looks silly as a curve, so fall back to the last 30 days.
+    const useRound = s.round_players >= 20 || s.recent_players < 20;
+    const n = useRound ? s.round_players : s.recent_players;
+    const below = useRound ? s.round_below : s.recent_below;
+    const hist = useRound ? s.round_hist : s.recent_hist;
+    const others = Math.max(0, n - 1);
+    if (others === 0) {
+      el.pct.innerHTML = 'You’re the first to finish this round. Check back later to see how you stack up.';
+    } else {
+      const p = Math.round((below / others) * 100);
+      el.pct.innerHTML = `You’re better than <b>${p}%</b> of players`;
+    }
+    el.doneCount.textContent = useRound
+      ? `${plural(s.round_players, 'player')} this round · ${plural(s.today_players, 'player')} today`
+      : `Curve from ${plural(s.recent_players, 'game')} in the last 30 days · ${plural(s.today_players, 'player')} today`;
+
+    // Smooth the 10-point buckets into a curve (Gaussian kernel).
+    const W = 320, H = 120, BASE = 104, TOP = 14, STEP = 5;
+    const bw = n < 30 ? 45 : n < 200 ? 30 : 20;
+    const xs = [];
+    for (let v = 0; v <= 500; v += STEP) xs.push(v);
+    const ys = xs.map((v) => hist.reduce((acc, c, b) => acc + (c ? c * Math.exp(-0.5 * ((v - (b * 10 + 5)) / bw) ** 2) : 0), 0));
+    const max = Math.max(...ys, 1e-9);
+    const X = (v) => (v / 500) * W;
+    const Y = (y) => BASE - (y / max) * (BASE - TOP);
+    const line = xs.map((v, i) => `${i ? 'L' : 'M'}${X(v).toFixed(1)},${Y(ys[i]).toFixed(1)}`).join('');
+    const area = `${line}L${W},${BASE}L0,${BASE}Z`;
+    const me = rs.total;
+    const myY = Y(ys[Math.round(me / STEP)]);
+    const clipW = X(me).toFixed(1);
+    el.curve.innerHTML = `
+      <defs><clipPath id="below"><rect x="0" y="0" width="${clipW}" height="${H}"/></clipPath></defs>
+      <path d="${area}" class="c-area"/>
+      <path d="${area}" class="c-below" clip-path="url(#below)"/>
+      <path d="${line}" class="c-line"/>
+      <line x1="0" x2="${W}" y1="${BASE}" y2="${BASE}" class="c-base"/>
+      <line x1="${clipW}" x2="${clipW}" y1="${myY.toFixed(1)}" y2="${BASE}" class="c-me"/>
+      <circle cx="${clipW}" cy="${myY.toFixed(1)}" r="5" class="c-dot"/>
+      <text x="${Math.min(W - 22, Math.max(22, X(me))).toFixed(1)}" y="${Math.max(11, myY - 10).toFixed(1)}" class="c-you">You</text>`;
+    el.curveBox.hidden = false;
   }
 
   function renderStats() {
-    const done = Object.entries(store.rounds).filter(([, v]) => v.finished).sort(([a], [b]) => (a < b ? -1 : 1));
+    const done = Object.entries(store.rounds).filter(([, v]) => v.finished);
     const totals = done.map(([, v]) => v.total);
     el.sPlayed.textContent = done.length;
     el.sAvg.textContent = totals.length ? Math.round(totals.reduce((a, b) => a + b, 0) / totals.length) : 0;
@@ -199,13 +283,12 @@
     clearTimeout(nextTimer);
     const ms = Date.parse(round.endsAt) - Date.now();
     if (ms <= 0) {
-      el.nextRound.textContent = 'New photos are on their way. Refresh in a few minutes.';
+      el.nextRound.textContent = 'The next round is on its way. Refresh in a few minutes.';
       nextTimer = setTimeout(checkForNewRound, 120e3);
       return;
     }
     const h = Math.floor(ms / 3600e3), m = Math.floor((ms % 3600e3) / 60e3), s = Math.floor((ms % 60e3) / 1e3);
-    const at = sgt(round.endsAt, { hour: 'numeric', hour12: true }).replace(' ', '').toLowerCase();
-    el.nextRound.textContent = `Next round at ${at} SGT, in ${h ? h + 'h ' : ''}${m}m ${String(s).padStart(2, '0')}s`;
+    el.nextRound.textContent = `Next round at ${hourName(round.endsAt)} SGT, in ${h ? h + 'h ' : ''}${m}m ${String(s).padStart(2, '0')}s`;
     nextTimer = setTimeout(tickNext, 1000);
   }
   async function checkForNewRound() {
@@ -216,20 +299,20 @@
     nextTimer = setTimeout(checkForNewRound, 120e3);
   }
 
+  // ---- sharing ----
   const gridText = () =>
     REGIONS.map((r) => EMOJI[tier(score(rs.guesses[r], answers[r]))]).join('') + '\n' +
     REGIONS.map((r) => arrow(rs.guesses[r], answers[r])).join('');
-  // Short enough for one post: no real numbers, so it doesn't spoil the round for anyone.
+  // Short enough for one post, and no real numbers so it doesn't spoil the round.
   const shareText = () =>
     `🌫️ Hazedle · ${dayName(round.startsAt, false)} ${hourName(round.startsAt)}\n` +
-    `${rs.total}/1000 ${mood(rs.total)}\n` +
+    `${rs.total}/500 ${mood(rs.total)}\n` +
     `${gridText()}\n` +
     `#Hazedle ${URL_SELF.replace(/^https?:\/\//, '')}`;
 
   function tweet() {
     window.open('https://x.com/intent/post?text=' + encodeURIComponent(shareText()), '_blank', 'noopener');
   }
-
   async function share() {
     const text = shareText();
     try {
@@ -238,7 +321,7 @@
         return;
       }
       await navigator.clipboard.writeText(text);
-      el.toast.textContent = 'Copied to clipboard';
+      el.toast.textContent = 'Copied! Paste it anywhere.';
     } catch (e) {
       if (e && e.name === 'AbortError') return;
       el.toast.textContent = 'Couldn’t copy. Here it is: ' + text.replace(/\n/g, ' ');
@@ -251,36 +334,47 @@
     return r.json();
   });
 
-  async function start() {
-    try {
-      round = await fetchRound();
-      answers = unhide(round.a);
-    } catch (e) {
-      el.roundLabel.textContent = '';
-      el.error.hidden = false;
-      el.error.textContent = 'Couldn’t load this round’s photos. Try refreshing in a minute.';
-      return;
-    }
-    if (round.hourTo) {
-      el.roundLabel.textContent = `${roundName(round)} · photos from ${readingHour(round).label}, scored on NEA's ${hourName(round.hourTo)} reading`;
-      el.actualLabel.textContent = `NEA ${hourName(round.hourTo)} PM2.5 (${readingHour(round).label} avg)`;
-    } else {
-      // Rounds from before photos were tied to the reading hour.
-      el.roundLabel.textContent = roundName(round);
-      el.actualLabel.textContent = 'Actual 1-hr PM2.5';
-    }
-    rs = store.rounds[round.id] ||= { step: 0, guesses: {} };
-    // Keep storage small: last 200 rounds is ~50 days.
-    const keys = Object.keys(store.rounds).sort();
-    keys.slice(0, Math.max(0, keys.length - 200)).forEach((k) => delete store.rounds[k]);
-    save(store);
-    if (!store.seenHelp) { store.seenHelp = true; save(store); el.help.showModal(); }
+  function beginGame() {
+    el.intro.hidden = true;
+    el.game.hidden = false;
     if (rs.finished) return finish();
     el.play.hidden = false;
     showRegion();
   }
 
+  async function start() {
+    try {
+      round = await fetchRound();
+      answers = unhide(round.a);
+    } catch {
+      el.roundLabel.textContent = '';
+      el.error.hidden = false;
+      el.error.textContent = 'Couldn’t load this round’s photos. Try refreshing in a minute.';
+      return;
+    }
+    el.roundLabel.textContent = roundName(round);
+    el.actualLabel.textContent = round.hourTo
+      ? `Actual = NEA's ${hourName(round.hourTo)} reading, the ${hourRange(round)} average`
+      : "Actual = NEA's 1-hour PM2.5 reading";
+    rs = store.rounds[round.id] ||= { step: 0, guesses: {} };
+    // Keep storage small: last 200 rounds is ~50 days.
+    const keys = Object.keys(store.rounds).sort();
+    keys.slice(0, Math.max(0, keys.length - 200)).forEach((k) => delete store.rounds[k]);
+    save(store);
+
+    const started = rs.finished || Object.keys(rs.guesses).length > 0;
+    if (started) return beginGame();
+    el.intro.hidden = false;
+    el.startBtn.focus({ preventScroll: true });
+    rpc('hazedle_stats', { p_round: round.id })
+      .then((s) => {
+        if (s.today_players > 0) el.introCount.textContent = `${plural(s.today_players, 'player')} today`;
+      })
+      .catch(() => {});
+  }
+
   // ---- events ----
+  el.startBtn.addEventListener('click', beginGame);
   el.slider.addEventListener('input', () => setGuess(+el.slider.value));
   document.querySelectorAll('.nudge').forEach((b) => b.addEventListener('click', () => setGuess(rs.draft + +b.dataset.d)));
   el.lockBtn.addEventListener('click', lockIn);
@@ -297,9 +391,10 @@
   el.zoom.addEventListener('click', () => el.zoom.close());
   document.addEventListener('keydown', (e) => {
     if (el.play.hidden || document.querySelector('dialog[open]')) return;
-    if (!el.guessPanel.hidden) {
-      if (e.key === 'ArrowUp' || e.key === 'ArrowRight') { if (e.target !== el.slider) { setGuess(rs.draft + (e.shiftKey ? 10 : 1)); e.preventDefault(); } }
-      else if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') { if (e.target !== el.slider) { setGuess(rs.draft - (e.shiftKey ? 10 : 1)); e.preventDefault(); } }
+    if (!el.guessPanel.hidden && e.target !== el.slider) {
+      const step = e.shiftKey ? 10 : 1;
+      if (e.key === 'ArrowUp' || e.key === 'ArrowRight') { setGuess(rs.draft + step); e.preventDefault(); }
+      else if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') { setGuess(rs.draft - step); e.preventDefault(); }
       else if (e.key === 'Enter' && e.target.tagName !== 'BUTTON') { lockIn(); e.preventDefault(); }
     }
   });
