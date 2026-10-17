@@ -45,7 +45,6 @@
   const tier = (p) => (p >= 80 ? 4 : p >= 50 ? 3 : p >= 20 ? 2 : 1);
   const TIER_COLOR = { 4: 'var(--b0)', 3: 'var(--b1)', 2: 'var(--b2)', 1: 'var(--b3)' };
   const EMOJI = { 4: '🟩', 3: '🟨', 2: '🟧', 1: '🟥' };
-  const arrow = (g, a) => (Math.abs(g - a) <= 2 ? '🎯' : g > a ? '⬆️' : '⬇️');
   const mood = (t) => (t >= 450 ? '🏆' : t >= 375 ? '😎' : t >= 275 ? '🙂' : t >= 175 ? '😶‍🌫️' : '😷');
   const pct = (v) => Math.min(100, (v / SLIDER_MAX) * 100) + '%';
   const sgt = (iso, opts) => new Date(iso).toLocaleString('en-SG', { timeZone: 'Asia/Singapore', ...opts });
@@ -191,9 +190,7 @@
     el.play.hidden = true;
     el.done.hidden = false;
     renderSteps();
-    el.total.textContent = rs.total;
-    el.mood.textContent = mood(rs.total);
-    el.grid.textContent = gridText();
+    countUp(scores);
     el.rows.innerHTML = REGIONS.map((r, i) => {
       const g = rs.guesses[r], a = answers[r], p = scores[i];
       return `<li><span class="r">${r}</span><span class="d">you ${g} · actual ${a}</span><span class="p" style="--c:${TIER_COLOR[tier(p)]}">${p}</span></li>`;
@@ -202,6 +199,41 @@
     tickNext();
     loadCurve(scores);
     window.scrollTo({ top: 0 });
+  }
+
+  // Total ticks up from 0, fast then slowing, and each region's square lands as the
+  // count passes its points.
+  let countRaf;
+  function countUp(scores) {
+    cancelAnimationFrame(countRaf);
+    const total = rs.total;
+    const tiles = scores.map((p) => EMOJI[tier(p)]);
+    let sum = 0;
+    const lands = scores.map((p) => (sum += p));
+    const paint = (v, shown) => {
+      el.total.textContent = v;
+      el.grid.innerHTML = tiles.map((t, i) => `<span class="tile${i < shown ? ' in' : ''}">${i < shown ? t : '⬛'}</span>`).join('');
+    };
+    const end = () => {
+      paint(total, tiles.length);
+      el.mood.textContent = mood(total);
+      el.mood.classList.add('pop');
+    };
+    el.mood.textContent = '';
+    el.mood.classList.remove('pop');
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return end();
+    const dur = Math.min(2400, 900 + total * 3);
+    let t0 = null; // start timing at the first painted frame, not when the tab may be hidden
+    const tick = (t) => {
+      t0 ??= t;
+      const k = Math.min(1, (t - t0) / dur);
+      const v = Math.round(total * (1 - Math.pow(1 - k, 3)));
+      paint(v, k >= 1 ? tiles.length : lands.filter((c) => c <= v).length);
+      if (k < 1) countRaf = requestAnimationFrame(tick);
+      else end();
+    };
+    paint(0, 0);
+    countRaf = requestAnimationFrame(tick);
   }
 
   // ---- the curve: where this score sits among everyone's ----
@@ -300,10 +332,8 @@
   }
 
   // ---- sharing ----
-  const gridText = () =>
-    REGIONS.map((r) => EMOJI[tier(score(rs.guesses[r], answers[r]))]).join('') + '\n' +
-    REGIONS.map((r) => arrow(rs.guesses[r], answers[r])).join('');
-  // Short enough for one post, and no real numbers so it doesn't spoil the round.
+  // Colours only: no numbers and no too-high/too-low hints, so it doesn't spoil the round.
+  const gridText = () => REGIONS.map((r) => EMOJI[tier(score(rs.guesses[r], answers[r]))]).join('');
   const shareText = () =>
     `🌫️ Hazedle · ${dayName(round.startsAt, false)} ${hourName(round.startsAt)}\n` +
     `${rs.total}/500 ${mood(rs.total)}\n` +
