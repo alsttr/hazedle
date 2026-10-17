@@ -308,12 +308,13 @@
     clearTimeout(nextTimer);
     const ms = Date.parse(round.endsAt) - Date.now();
     if (ms <= 0) {
-      el.nextRound.textContent = 'The next round is on its way. Refresh in a few minutes.';
+      el.nextRound.innerHTML = '<span class="dot"></span>Next round is landing any minute…';
       nextTimer = setTimeout(checkForNewRound, 120e3);
       return;
     }
     const h = Math.floor(ms / 3600e3), m = Math.floor((ms % 3600e3) / 60e3), s = Math.floor((ms % 60e3) / 1e3);
-    el.nextRound.textContent = `Next round at ${hourName(round.endsAt)} SGT, in ${h ? h + 'h ' : ''}${m}m ${String(s).padStart(2, '0')}s`;
+    const pad = (n) => String(n).padStart(2, '0');
+    el.nextRound.innerHTML = `<span class="dot"></span>Next round in <b>${h}:${pad(m)}:${pad(s)}</b><span class="at">${hourName(round.endsAt)} SGT</span>`;
     nextTimer = setTimeout(tickNext, 1000);
   }
   async function checkForNewRound() {
