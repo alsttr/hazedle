@@ -131,10 +131,10 @@
   <dialog id="help">
     <form method="dialog">
       <h2>Scoring</h2>
-      <p>Up to 100 points per region. You lose points the further off you are, and a guess 2.5× too high or too low gets zero.</p>
+      <p>Up to 100 points per region. You lose 2 points for every µg/m³ you're off, so 50 or more off scores zero.</p>
       <p>Photos are taken in the hour before the round starts. The answer is NEA's 1-hour PM2.5 for that hour.</p>
       <ul class="legend">
-        <li>🎯 95+</li><li>🟩 80–94</li><li>🟨 50–79</li><li>🟧 20–49</li><li>🟥 under 20</li>
+        <li>🎯 within 3</li><li>🟩 within 10</li><li>🟨 within 25</li><li>🟧 within 40</li><li>🟥 more than 40 off</li>
       </ul>
       <button class="primary">Got it</button>
     </form>
@@ -144,6 +144,6 @@
     <form method="dialog"><button aria-label="Close"><img id="zoomImg" alt=""></button></form>
   </dialog>
 
-  <script src="app.js?v=6"></script>
+  <script src="app.js?v=7"></script>
 </body>
 </html>

@@ -3,7 +3,7 @@
 
   const REGIONS = ['north', 'south', 'east', 'west', 'central'];
   const MAX_PTS = 100;
-  const ZERO_AT = Math.log(2.5); // off by 2.5x either way scores nothing
+  const PTS_PER_UNIT = 2; // lose 2 points per µg/m³ off, so 50 off scores nothing
   const SLIDER_MAX = 350;
   const GUESS_MAX = 600;
   const KEY = 'hazedle:v2'; // v1 scored out of 200 per region
@@ -38,12 +38,10 @@
     v <= 250 ? { name: 'High', c: 'var(--b2)' } :
                { name: 'Very high', c: 'var(--b3)' };
   const setBand = (node, v) => { const b = band(v); node.textContent = b.name; node.style.setProperty('--c', b.c); };
-  const score = (guess, actual) => {
-    const err = Math.abs(Math.log((guess + 5) / (actual + 5)));
-    return Math.round(MAX_PTS * Math.max(0, 1 - err / ZERO_AT));
-  };
-  // Five tiers: bullseye, green, yellow, orange, red.
-  const tier = (p) => (p >= 95 ? 5 : p >= 80 ? 4 : p >= 50 ? 3 : p >= 20 ? 2 : 1);
+  // Flat scale: every µg/m³ off costs the same, whatever the reading.
+  const score = (guess, actual) => Math.max(0, MAX_PTS - PTS_PER_UNIT * Math.abs(guess - actual));
+  // Five tiers by distance off: bullseye ≤3, green ≤10, yellow ≤25, orange ≤40, red beyond.
+  const tier = (p) => (p >= 94 ? 5 : p >= 80 ? 4 : p >= 50 ? 3 : p >= 20 ? 2 : 1);
   const TIER_COLOR = { 5: 'var(--bull)', 4: 'var(--b0)', 3: 'var(--b1)', 2: 'var(--b2)', 1: 'var(--b3)' };
   const EMOJI = { 5: '🎯', 4: '🟩', 3: '🟨', 2: '🟧', 1: '🟥' };
   const pct = (v) => Math.min(100, (v / SLIDER_MAX) * 100) + '%';
@@ -67,7 +65,7 @@
   };
   const pick = (list, seed) => list[Math.abs(seed) % list.length];
   const verdictFor = (p, g, a, seed) => {
-    if (p >= 95) return pick(LINES.perfect, seed);
+    if (p >= 94) return pick(LINES.perfect, seed);
     if (p >= 80) return pick(LINES.great, seed);
     if (p >= 30) return pick(g > a ? LINES.over : LINES.under, seed);
     return pick(g > a ? LINES.wayOver : LINES.wayUnder, seed);
@@ -182,11 +180,10 @@
 
   function finish() {
     const scores = REGIONS.map((r) => score(rs.guesses[r], answers[r]));
-    if (!rs.finished) {
-      rs.finished = true;
-      rs.total = scores.reduce((s, x) => s + x, 0);
-      save(store);
-    }
+    // Always recomputed, so a round finished before a scoring change shows consistently.
+    rs.total = scores.reduce((s, x) => s + x, 0);
+    rs.finished = true;
+    save(store);
     el.play.hidden = true;
     el.done.hidden = false;
     renderSteps();
