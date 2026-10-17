@@ -243,6 +243,7 @@
     }
   }
 
+  let betterThan = null; // % of other players beaten, once the curve has loaded
   function drawCurve(s) {
     // A thin round looks silly as a curve, so fall back to the last 30 days.
     const useRound = s.round_players >= 20 || s.recent_players < 20;
@@ -250,6 +251,7 @@
     const below = useRound ? s.round_below : s.recent_below;
     const hist = useRound ? s.round_hist : s.recent_hist;
     const others = Math.max(0, n - 1);
+    betterThan = others > 0 ? Math.round((below / others) * 100) : null;
     if (others === 0) {
       el.pct.innerHTML = 'You’re the first to finish this round. Check back later to see how you stack up.';
     } else {
@@ -330,7 +332,7 @@
   const gridText = () => REGIONS.map((r) => EMOJI[tier(score(rs.guesses[r], answers[r]))]).join('');
   const shareText = () =>
     `🌫️ Hazedle · ${dayName(round.startsAt, false)} ${hourName(round.startsAt)} round\n` +
-    `${rs.total}/500\n` +
+    `${rs.total}/500${betterThan != null ? ` · better than ${betterThan}% of players` : ''}\n` +
     `${gridText()}\n` +
     `#Hazedle ${URL_SELF.replace(/^https?:\/\//, '')}`;
 
