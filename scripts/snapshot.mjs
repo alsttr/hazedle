@@ -95,9 +95,10 @@ async function pm25() {
 const hide = (obj) => Buffer.from(JSON.stringify(obj)).toString('base64').split('').reverse().join('');
 const unhide = (s) => JSON.parse(Buffer.from(s.split('').reverse().join(''), 'base64').toString());
 
+let liveRound = null;
 async function reuseLive(id) {
   try {
-    const live = await getJSON(new URL('round/round.json', LIVE));
+    const live = (liveRound = await getJSON(new URL('round/round.json', LIVE)));
     if (live.id !== id) return false;
     for (const r of live.regions) {
       if (!r.image) continue;
@@ -153,13 +154,17 @@ async function main() {
   };
   await writeFile(new URL('round.json', OUT), JSON.stringify(round, null, 1));
 
-  // Small, committed log of past rounds' answers (no images).
-  let history = [];
-  if (existsSync(HISTORY)) history = JSON.parse(await readFile(HISTORY, 'utf8'));
-  history = history.filter((h) => h.id !== id);
-  history.push({ id, readingAt: at, pm25: answers, places: Object.fromEntries(regions.map((r) => [r.region, r.place])) });
-  await writeFile(HISTORY, JSON.stringify(history, null, 1) + '\n');
-  console.log(`Round ${id} ready, answers from ${at}:`, unhide(round.a));
+  // Small, committed log of past rounds' answers (no images). The repo is public, so a
+  // round's answers are only logged once it has ended, i.e. when the next one replaces it.
+  const prev = liveRound;
+  if (prev && prev.id !== id && prev.a) {
+    let history = [];
+    if (existsSync(HISTORY)) history = JSON.parse(await readFile(HISTORY, 'utf8'));
+    history = history.filter((h) => h.id !== prev.id);
+    history.push({ id: prev.id, readingAt: prev.readingAt, pm25: unhide(prev.a), places: Object.fromEntries(prev.regions.map((r) => [r.region, r.place])) });
+    await writeFile(HISTORY, JSON.stringify(history, null, 1) + '\n');
+  }
+  console.log(`Round ${id} ready (readings from ${at})`);
 }
 
 main().catch((e) => {
