@@ -42,8 +42,8 @@
   // answer, then taper so even a rough guess keeps a few, reaching 0 at 100 off.
   // 0 off 100 · 2 off 96 · 5 off 90 · 10 off 81 · 25 off 56 · 50 off 25 · 75 off 6 · 100 off 0
   const score = (guess, actual) => Math.round(MAX_PTS * Math.max(0, 1 - Math.abs(guess - actual) / ZERO_OFF) ** 2);
-  // Five tiers by distance off: bullseye ≤2, green ≤10, yellow ≤25, orange ≤50, red beyond.
-  const tier = (p) => (p >= 96 ? 5 : p >= 81 ? 4 : p >= 56 ? 3 : p >= 25 ? 2 : 1);
+  // Five tiers by distance off: bullseye ≤5, green ≤10, yellow ≤25, orange ≤50, red beyond.
+  const tier = (p) => (p >= 90 ? 5 : p >= 81 ? 4 : p >= 56 ? 3 : p >= 25 ? 2 : 1);
   const TIER_COLOR = { 5: 'var(--bull)', 4: 'var(--b0)', 3: 'var(--b1)', 2: 'var(--b2)', 1: 'var(--b3)' };
   const EMOJI = { 5: '🎯', 4: '🟩', 3: '🟨', 2: '🟧', 1: '🟥' };
   const pct = (v) => Math.min(100, (v / SLIDER_MAX) * 100) + '%';
@@ -67,7 +67,7 @@
   };
   const pick = (list, seed) => list[Math.abs(seed) % list.length];
   const verdictFor = (p, g, a, seed) => {
-    if (p >= 96) return pick(LINES.perfect, seed);
+    if (p >= 90) return pick(LINES.perfect, seed);
     if (p >= 81) return pick(LINES.great, seed);
     if (p >= 30) return pick(g > a ? LINES.over : LINES.under, seed);
     return pick(g > a ? LINES.wayOver : LINES.wayUnder, seed);
