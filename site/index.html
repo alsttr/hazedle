@@ -13,7 +13,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=1">
+  <link rel="stylesheet" href="style.css?v=2">
 </head>
 <body>
   <div class="haze" aria-hidden="true"></div>
@@ -63,7 +63,7 @@
       <div class="panel reveal" id="revealPanel" hidden>
         <div class="reveal-row">
           <div>
-            <div class="label">Actual 1-hr PM2.5</div>
+            <div class="label" id="actualLabel">Actual 1-hr PM2.5</div>
             <div class="big" id="actual">0</div>
             <div class="band" id="actualBand"></div>
           </div>
@@ -90,7 +90,8 @@
         <p class="grid" id="grid"></p>
         <ul class="rows" id="rows"></ul>
         <div class="actions">
-          <button class="primary" id="shareBtn">Share result</button>
+          <button class="primary" id="tweetBtn">Post on X</button>
+          <button class="secondary" id="shareBtn">Copy result</button>
         </div>
         <p class="toast" id="toast" role="status"></p>
       </div>
@@ -113,9 +114,10 @@
   <dialog id="help">
     <form method="dialog">
       <h2>How to play</h2>
-      <p>Every 6 hours (12am, 6am, 12pm, 6pm in Singapore) Hazedle grabs a photo from a live camera in each region: <b>north, south, east, west and central</b>.</p>
-      <p>Look at the haze and guess that region's <b>1-hour PM2.5</b> reading from NEA, in µg/m³. After each guess you'll see the real number, so use it for the next one.</p>
+      <p>A new round starts every 6 hours: 12am, 6am, 12pm and 6pm in Singapore. Everyone gets the same five photos, one from a live camera in each region: <b>north, south, east, west and central</b>.</p>
+      <p>The photos are taken in the hour before the round starts. Guess that region's <b>1-hour PM2.5</b> from NEA for the same hour, in µg/m³. For the 6pm round that's the 5–6pm average. After each guess you'll see the real number, so use it for the next one.</p>
       <p>Each region is worth up to <b>200 points</b>. You get full marks for an exact guess and less the further off you are. Being off by 2.5× in either direction scores zero.</p>
+      <p>Your shareable result shows how close each region was (🟩 🟨 🟧 🟥) and which way you missed: ⬆️ too high, ⬇️ too low, 🎯 spot on.</p>
       <ul class="legend">
         <li><i class="b0"></i>0–55 Normal</li>
         <li><i class="b1"></i>56–150 Elevated</li>
@@ -130,6 +132,6 @@
     <form method="dialog"><button aria-label="Close"><img id="zoomImg" alt=""></button></form>
   </dialog>
 
-  <script src="app.js?v=1"></script>
+  <script src="app.js?v=2"></script>
 </body>
 </html>

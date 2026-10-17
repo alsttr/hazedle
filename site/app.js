@@ -16,7 +16,7 @@
     guessPanel: $('guessPanel'), slider: $('slider'), guessOut: $('guessOut'), guessBand: $('guessBand'), lockBtn: $('lockBtn'),
     revealPanel: $('revealPanel'), actual: $('actual'), actualBand: $('actualBand'), yours: $('yours'), pts: $('pts'),
     markYou: $('markYou'), markReal: $('markReal'), verdict: $('verdict'), nextBtn: $('nextBtn'),
-    total: $('total'), grid: $('grid'), rows: $('rows'), shareBtn: $('shareBtn'), toast: $('toast'), nextRound: $('nextRound'),
+    total: $('total'), grid: $('grid'), rows: $('rows'), shareBtn: $('shareBtn'), tweetBtn: $('tweetBtn'), actualLabel: $('actualLabel'), toast: $('toast'), nextRound: $('nextRound'),
     sPlayed: $('sPlayed'), sAvg: $('sAvg'), sBest: $('sBest'), sStreak: $('sStreak'),
     help: $('help'), helpBtn: $('helpBtn'), zoom: $('zoom'), zoomImg: $('zoomImg'),
   };
@@ -41,12 +41,19 @@
   };
   const tier = (p) => (p >= 160 ? 4 : p >= 100 ? 3 : p >= 40 ? 2 : 1);
   const EMOJI = { 4: '🟩', 3: '🟨', 2: '🟧', 1: '🟥' };
+  // 🎯 within 2 µg/m³, ⬆️ guessed too high, ⬇️ guessed too low
+  const arrow = (g, a) => (Math.abs(g - a) <= 2 ? '🎯' : g > a ? '⬆️' : '⬇️');
+  const mood = (t) => (t >= 900 ? '🏆' : t >= 750 ? '😎' : t >= 550 ? '🙂' : t >= 350 ? '😶‍🌫️' : '😷');
   const pct = (v) => Math.min(100, (v / SLIDER_MAX) * 100) + '%';
   const sgt = (iso, opts) => new Date(iso).toLocaleString('en-SG', { timeZone: 'Asia/Singapore', ...opts });
-  const roundName = (r) => {
-    const day = sgt(r.startsAt, { weekday: 'short', day: 'numeric', month: 'short' });
-    const hour = sgt(r.startsAt, { hour: 'numeric', hour12: true }).replace(' ', '').toLowerCase();
-    return `${day}, ${hour} round`;
+  const hourName = (iso) => sgt(iso, { hour: 'numeric', hour12: true }).replace(' ', '').toLowerCase();
+  const dayName = (iso, weekday = true) => sgt(iso, { ...(weekday && { weekday: 'short' }), day: 'numeric', month: 'short' });
+  const roundName = (r) => `${dayName(r.startsAt)}, ${hourName(r.startsAt)} round`;
+  // The reading a round is scored on averages the hour before the round starts.
+  const readingHour = (r) => {
+    const to = r.hourTo || r.startsAt;
+    const from = r.hourFrom || new Date(Date.parse(to) - 3600e3).toISOString();
+    return { from, to, label: `${hourName(from).replace(/[ap]m$/, (m) => (hourName(from).slice(-2) === hourName(to).slice(-2) ? '' : m))}–${hourName(to)}` };
   };
   const verdictFor = (p, g, a) => {
     if (p === MAX_PTS) return 'Bang on. Are you an NEA sensor?';
@@ -161,7 +168,7 @@
     el.done.hidden = false;
     renderSteps();
     el.total.textContent = rs.total;
-    el.grid.textContent = REGIONS.map((r) => EMOJI[tier(score(rs.guesses[r], answers[r]))]).join('');
+    el.grid.textContent = gridText();
     el.rows.innerHTML = REGIONS.map((r) => {
       const g = rs.guesses[r], a = answers[r];
       return `<li><span class="r">${r}</span><span class="d">guessed ${g}, actual ${a}</span><span class="p">${score(g, a)}</span></li>`;
@@ -209,8 +216,22 @@
     nextTimer = setTimeout(checkForNewRound, 120e3);
   }
 
+  const gridText = () =>
+    REGIONS.map((r) => EMOJI[tier(score(rs.guesses[r], answers[r]))]).join('') + '\n' +
+    REGIONS.map((r) => arrow(rs.guesses[r], answers[r])).join('');
+  // Short enough for one post: no real numbers, so it doesn't spoil the round for anyone.
+  const shareText = () =>
+    `🌫️ Hazedle · ${dayName(round.startsAt, false)} ${hourName(round.startsAt)}\n` +
+    `${rs.total}/1000 ${mood(rs.total)}\n` +
+    `${gridText()}\n` +
+    `#Hazedle ${URL_SELF.replace(/^https?:\/\//, '')}`;
+
+  function tweet() {
+    window.open('https://x.com/intent/post?text=' + encodeURIComponent(shareText()), '_blank', 'noopener');
+  }
+
   async function share() {
-    const text = `Hazedle 🌫️ ${roundName(round)}\n${rs.total}/1000  ${el.grid.textContent}\n${URL_SELF}`;
+    const text = shareText();
     try {
       if (navigator.share && matchMedia('(pointer: coarse)').matches) {
         await navigator.share({ text });
@@ -240,7 +261,14 @@
       el.error.textContent = 'Couldn’t load this round’s photos. Try refreshing in a minute.';
       return;
     }
-    el.roundLabel.textContent = roundName(round) + ' · photos taken ' + sgt(round.capturedAt, { hour: 'numeric', minute: '2-digit', hour12: true });
+    if (round.hourTo) {
+      el.roundLabel.textContent = `${roundName(round)} · photos from ${readingHour(round).label}, scored on NEA's ${hourName(round.hourTo)} reading`;
+      el.actualLabel.textContent = `NEA ${hourName(round.hourTo)} PM2.5 (${readingHour(round).label} avg)`;
+    } else {
+      // Rounds from before photos were tied to the reading hour.
+      el.roundLabel.textContent = roundName(round);
+      el.actualLabel.textContent = 'Actual 1-hr PM2.5';
+    }
     rs = store.rounds[round.id] ||= { step: 0, guesses: {} };
     // Keep storage small: last 200 rounds is ~50 days.
     const keys = Object.keys(store.rounds).sort();
@@ -258,6 +286,7 @@
   el.lockBtn.addEventListener('click', lockIn);
   el.nextBtn.addEventListener('click', next);
   el.shareBtn.addEventListener('click', share);
+  el.tweetBtn.addEventListener('click', tweet);
   el.helpBtn.addEventListener('click', () => el.help.showModal());
   el.photoBtn.addEventListener('click', () => {
     if (el.photo.hidden || !el.photo.src) return;
