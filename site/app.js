@@ -18,8 +18,8 @@
   ['roundLabel', 'intro', 'startBtn', 'introCount', 'game', 'steps', 'play', 'done', 'error',
    'photo', 'photoBtn', 'offline', 'regionTag', 'place', 'credit',
    'guessPanel', 'slider', 'guessOut', 'guessBand', 'lockBtn',
-   'revealPanel', 'yours', 'actual', 'actualBand', 'scoreCell', 'pts', 'markYou', 'markReal', 'verdict', 'actualLabel', 'nextBtn',
-   'total', 'mood', 'grid', 'curveBox', 'pct', 'curve', 'doneCount', 'rows', 'tweetBtn', 'shareBtn', 'toast', 'nextRound',
+   'revealPanel', 'yours', 'actual', 'actualBand', 'scoreCell', 'pts', 'markYou', 'markReal', 'verdict', 'nextBtn',
+   'total', 'grid', 'curveBox', 'pct', 'curve', 'doneCount', 'rows', 'tweetBtn', 'shareBtn', 'toast', 'nextRound',
    'sPlayed', 'sAvg', 'sBest', 'sStreak', 'help', 'helpBtn', 'zoom', 'zoomImg'].forEach((id) => (el[id] = $(id)));
 
   // ---- storage (never fatal) ----
@@ -42,10 +42,10 @@
     const err = Math.abs(Math.log((guess + 5) / (actual + 5)));
     return Math.round(MAX_PTS * Math.max(0, 1 - err / ZERO_AT));
   };
-  const tier = (p) => (p >= 80 ? 4 : p >= 50 ? 3 : p >= 20 ? 2 : 1);
-  const TIER_COLOR = { 4: 'var(--b0)', 3: 'var(--b1)', 2: 'var(--b2)', 1: 'var(--b3)' };
-  const EMOJI = { 4: '🟩', 3: '🟨', 2: '🟧', 1: '🟥' };
-  const mood = (t) => (t >= 450 ? '🏆' : t >= 375 ? '😎' : t >= 275 ? '🙂' : t >= 175 ? '😶‍🌫️' : '😷');
+  // Five tiers: bullseye, green, yellow, orange, red.
+  const tier = (p) => (p >= 95 ? 5 : p >= 80 ? 4 : p >= 50 ? 3 : p >= 20 ? 2 : 1);
+  const TIER_COLOR = { 5: 'var(--bull)', 4: 'var(--b0)', 3: 'var(--b1)', 2: 'var(--b2)', 1: 'var(--b3)' };
+  const EMOJI = { 5: '🎯', 4: '🟩', 3: '🟨', 2: '🟧', 1: '🟥' };
   const pct = (v) => Math.min(100, (v / SLIDER_MAX) * 100) + '%';
   const sgt = (iso, opts) => new Date(iso).toLocaleString('en-SG', { timeZone: 'Asia/Singapore', ...opts });
   const hourName = (iso) => sgt(iso, { hour: 'numeric', hour12: true }).replace(' ', '').toLowerCase();
@@ -67,7 +67,7 @@
   };
   const pick = (list, seed) => list[Math.abs(seed) % list.length];
   const verdictFor = (p, g, a, seed) => {
-    if (p >= 97) return pick(LINES.perfect, seed);
+    if (p >= 95) return pick(LINES.perfect, seed);
     if (p >= 80) return pick(LINES.great, seed);
     if (p >= 30) return pick(g > a ? LINES.over : LINES.under, seed);
     return pick(g > a ? LINES.wayOver : LINES.wayUnder, seed);
@@ -214,13 +214,7 @@
       el.total.textContent = v;
       el.grid.innerHTML = tiles.map((t, i) => `<span class="tile${i < shown ? ' in' : ''}">${i < shown ? t : '⬛'}</span>`).join('');
     };
-    const end = () => {
-      paint(total, tiles.length);
-      el.mood.textContent = mood(total);
-      el.mood.classList.add('pop');
-    };
-    el.mood.textContent = '';
-    el.mood.classList.remove('pop');
+    const end = () => paint(total, tiles.length);
     if (matchMedia('(prefers-reduced-motion: reduce)').matches) return end();
     const dur = Math.min(2400, 900 + total * 3);
     let t0 = null; // start timing at the first painted frame, not when the tab may be hidden
@@ -336,7 +330,7 @@
   const gridText = () => REGIONS.map((r) => EMOJI[tier(score(rs.guesses[r], answers[r]))]).join('');
   const shareText = () =>
     `🌫️ Hazedle · ${dayName(round.startsAt, false)} ${hourName(round.startsAt)}\n` +
-    `${rs.total}/500 ${mood(rs.total)}\n` +
+    `${rs.total}/500\n` +
     `${gridText()}\n` +
     `#Hazedle ${URL_SELF.replace(/^https?:\/\//, '')}`;
 
@@ -383,9 +377,6 @@
       return;
     }
     el.roundLabel.textContent = roundName(round);
-    el.actualLabel.textContent = round.hourTo
-      ? `Actual = NEA's ${hourName(round.hourTo)} reading, the ${hourRange(round)} average`
-      : "Actual = NEA's 1-hour PM2.5 reading";
     rs = store.rounds[round.id] ||= { step: 0, guesses: {} };
     // Keep storage small: last 200 rounds is ~50 days.
     const keys = Object.keys(store.rounds).sort();

@@ -13,7 +13,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=4">
+  <link rel="stylesheet" href="style.css?v=5">
 </head>
 <body>
   <div class="haze" aria-hidden="true"></div>
@@ -29,7 +29,7 @@
     <section id="intro" class="intro" hidden>
       <p class="pitch">Five regions, one chance to guess the PM2.5.</p>
       <p class="ready">Are you ready?</p>
-      <button class="primary" id="startBtn">I'm ready</button>
+      <button class="primary" id="startBtn">Haze me up</button>
       <p class="count" id="introCount"></p>
     </section>
 
@@ -89,7 +89,6 @@
             <span class="mark real" id="markReal"></span>
           </div>
           <p class="verdict" id="verdict"></p>
-          <p class="fine" id="actualLabel"></p>
           <button class="primary" id="nextBtn">Next region</button>
         </div>
       </section>
@@ -97,7 +96,6 @@
       <section id="done" hidden>
         <div class="panel summary">
           <div class="total"><span id="total">0</span><small>/500</small></div>
-          <p class="mood" id="mood"></p>
           <p class="grid" id="grid"></p>
           <div class="curve" id="curveBox" hidden>
             <p class="pct" id="pct"></p>
@@ -119,14 +117,14 @@
           <div><b id="sStreak">0</b><span>streak</span></div>
         </div>
         <p class="next" id="nextRound"></p>
+        <p class="follow">Follow the creator <a href="https://www.instagram.com/alsttr/" target="_blank" rel="noopener">@alsttr</a> on Instagram</p>
       </section>
     </div>
 
     <p class="error" id="error" hidden></p>
 
     <footer>
-      <p class="follow">Follow the creator <a href="https://www.instagram.com/alsttr/" target="_blank" rel="noopener">@alsttr</a> on Instagram</p>
-      <p>PM2.5 from NEA. Photos from LTA, Changi Sailing Club and Windy.com. Not health advice.</p>
+      <p>PM2.5 from NEA. Photos from LTA, Changi Sailing Club and Windy.com.</p>
     </footer>
   </main>
 
@@ -136,7 +134,7 @@
       <p>Up to 100 points per region. You lose points the further off you are, and a guess 2.5× too high or too low gets zero.</p>
       <p>Photos are taken in the hour before the round starts. The answer is NEA's 1-hour PM2.5 for that hour.</p>
       <ul class="legend">
-        <li>🟩 80+</li><li>🟨 50–79</li><li>🟧 20–49</li><li>🟥 under 20</li>
+        <li>🎯 95+</li><li>🟩 80–94</li><li>🟨 50–79</li><li>🟧 20–49</li><li>🟥 under 20</li>
       </ul>
       <button class="primary">Got it</button>
     </form>
@@ -146,6 +144,6 @@
     <form method="dialog"><button aria-label="Close"><img id="zoomImg" alt=""></button></form>
   </dialog>
 
-  <script src="app.js?v=5"></script>
+  <script src="app.js?v=6"></script>
 </body>
 </html>
