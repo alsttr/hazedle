@@ -216,7 +216,7 @@ dialog.zoom img { display: block; max-width: 96vw; max-height: 90vh; }
 /* reveal: you / actual / score */
 .trio { display: grid; grid-template-columns: 1fr 1fr 1.1fr; gap: 8px; }
 .cell { border: 1px solid var(--line); border-radius: 12px; padding: 10px 6px 8px; text-align: center; }
-.cell .label { font-size: 0.68rem; }
+.cell .label { font-size: 0.66rem; letter-spacing: 0.03em; white-space: nowrap; }
 .num { font: 700 2.1rem/1.1 Fraunces, Georgia, serif; font-variant-numeric: tabular-nums; margin-top: 2px; }
 .num small { font: 500 0.85rem Inter, sans-serif; opacity: 0.8; }
 .band.small { font-size: 0.72rem; margin-top: 2px; }
