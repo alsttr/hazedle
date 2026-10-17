@@ -110,8 +110,9 @@ async function lta(id, from, to) {
 async function windy(id) {
   const { buf, lastModified } = await getImage(`https://images-webcams.windy.com/${id.slice(-2)}/${id}/current/full/${id}.jpg`);
   if (!lastModified) throw new Error('no Last-Modified, capture time unknown');
-  // Last-Modified is the upload time; the time burned into the frame runs 3-4 min earlier.
-  return { buf, reportedAt: lastModified, lag: 5 * MIN, source: 'Last-Modified' };
+  // Last-Modified is the upload time; the time burned into the frame has run 3-9 min
+  // earlier (15:57 vs 16:01, 17:27 vs 17:36 on 17 Oct 2026), so allow 15.
+  return { buf, reportedAt: lastModified, lag: 15 * MIN, source: 'Last-Modified' };
 }
 async function rtspme(id) {
   const ref = { Referer: `https://rtsp.me/embed/${id}/` };
