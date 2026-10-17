@@ -8,6 +8,10 @@ name: New round
 on:
   schedule:
     - cron: "10,25,40 3,9,15,21 * * *"
+    # Catch-up runs 10 and 30 min after each round starts, in case every earlier run
+    # failed. They do nothing if the round is already live; otherwise they rebuild it from
+    # LTA's photo history for that hour (live-only cameras sit out) and the same reading.
+    - cron: "10,30 4,10,16,22 * * *"
   workflow_dispatch:
     inputs:
       force:
