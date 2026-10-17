@@ -328,7 +328,7 @@
   // Colours only: no numbers and no too-high/too-low hints, so it doesn't spoil the round.
   const gridText = () => REGIONS.map((r) => EMOJI[tier(score(rs.guesses[r], answers[r]))]).join('');
   const shareText = () =>
-    `🌫️ Hazedle · ${dayName(round.startsAt, false)} ${hourName(round.startsAt)}\n` +
+    `🌫️ Hazedle · ${dayName(round.startsAt, false)} ${hourName(round.startsAt)} round\n` +
     `${rs.total}/500\n` +
     `${gridText()}\n` +
     `#Hazedle ${URL_SELF.replace(/^https?:\/\//, '')}`;
