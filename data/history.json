@@ -1,1 +1,20 @@
-[]
+[
+ {
+  "id": "2026-10-17-12",
+  "readingAt": "2026-10-17T16:00:00+08:00",
+  "pm25": {
+   "north": 112,
+   "south": 170,
+   "east": 169,
+   "west": 221,
+   "central": 187
+  },
+  "places": {
+   "north": "Woodlands Causeway",
+   "south": "Sentosa Gateway",
+   "east": "Changi Sailing Club",
+   "west": "Tuas Second Link",
+   "central": "Sin Ming (Midview City)"
+  }
+ }
+]
