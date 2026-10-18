@@ -15,7 +15,7 @@
 // the live-only cameras sit the round out. If the live site already has the round
 // (e.g. a redeploy after a code change), its photos and answers are reused.
 
-import { mkdir, writeFile, readFile } from 'node:fs/promises';
+import { mkdir, writeFile, readFile, appendFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 
 const OUT = new URL('../site/round/', import.meta.url);
@@ -31,6 +31,8 @@ const REDEPLOY = process.argv.includes('--redeploy'); // keep whatever round is 
 const RETRY_EVERY = 2 * MIN; // re-poll a camera whose frame isn't inside the hour yet
 const PHOTO_CUTOFF = 1 * MIN; // stop trying for photos this long before the hour ends
 const READING_DEADLINE = 70 * MIN; // after the hour ends, give up waiting for NEA
+const MAX_LEAD = 5 * HOUR; // a run this close to the next round waits for it (jobs can run 6 h)
+const LATE_GRACE = 45 * MIN; // after a round starts, still build it if nothing else did
 
 // Only cameras that look out to a horizon (not down at a road), so the haze is judgeable.
 // Each round tries a region's cameras in a different order, so the view can change from
@@ -210,19 +212,45 @@ async function reuseLive(id) {
   }
 }
 
+// Tells the workflow whether there's anything to deploy.
+async function setPublish(v) {
+  if (process.env.GITHUB_OUTPUT) await appendFile(process.env.GITHUB_OUTPUT, `publish=${v}\n`);
+}
+
+// Which round this run should build, or null if it's too early (a later run will).
+// GitHub can start scheduled runs hours late, so the workflow wakes every 30 minutes and
+// whichever run gets here first simply waits in place until the photo hour comes round.
+async function pickRound() {
+  const now = Date.now();
+  if (FORCE) return windowStart(now + (ROUND_HOURS / 2) * HOUR); // nearest round start
+  const current = windowStart(now);
+  const live = await getJSON(new URL(`round/round.json?t=${now}`, LIVE)).catch(() => null);
+  liveRound = live;
+  // The current round never got built (every run was late): build it from history.
+  if (!live || live.id < roundId(current)) {
+    if (now < current + LATE_GRACE) return current;
+  }
+  const next = current + ROUND_HOURS * HOUR;
+  if (live && live.id === roundId(next)) return null; // already done
+  if (next - now > MAX_LEAD) {
+    console.log(`Next round (${roundId(next)}) is ${((next - now) / HOUR).toFixed(1)} h away; a later run will take it.`);
+    return null;
+  }
+  return next;
+}
+
 async function main() {
   await mkdir(OUT, { recursive: true });
-  // The round to build: the nearest round start (00/06/12/18 SGT), normally ~30 min away.
-  const start = windowStart(Date.now() + (ROUND_HOURS / 2) * HOUR);
+  if (REDEPLOY && !FORCE) {
+    if (await reuseLive(null)) return setPublish(true);
+  }
+  const start = await pickRound();
+  if (start == null) return setPublish(false);
   const stamp = start; // scored on the reading stamped at the round's start...
   const hourFrom = stamp - HOUR; // ...which averages the hour before it
   const id = roundId(start);
-  if (REDEPLOY && !FORCE) {
-    const live = await reuseLive(null);
-    if (live) return;
-  }
   console.log(`Round ${id}: photos must be from ${sgtTime(hourFrom)}-${sgtTime(stamp)} SGT, scored on NEA's ${neaStamp(stamp)} reading`);
-  if (!FORCE && (await reuseLive(id))) return;
+  if (!FORCE && (await reuseLive(id))) return setPublish(REDEPLOY);
 
   const shots = await takePhotos(hourFrom, stamp, id);
   const { readings, at, issuedAt } = await readingFor(stamp);
@@ -259,6 +287,7 @@ async function main() {
     await writeFile(HISTORY, JSON.stringify(history, null, 1) + '\n');
   }
 
+  await setPublish(true);
   console.log(`\nRound ${id} ready. Every photo vs the ${at.slice(11, 16)} reading (average ${sgtTime(hourFrom)}-${sgtTime(stamp)}):`);
   for (const r of regions) {
     const s = shots[r.region];

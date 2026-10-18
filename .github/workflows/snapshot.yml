@@ -1,25 +1,24 @@
 name: New round
 
-# Rounds start at 00:00, 06:00, 12:00 and 18:00 Singapore time (16, 22, 04, 10 UTC) and are
-# scored on NEA's reading stamped at that time, which averages the hour before. So the job
-# starts 50, 35 and 20 minutes before each round: it photographs that hour, waits for the
-# reading, then publishes. GitHub's scheduler can run late, hence three tries; once a
-# round is live, later runs for it just reuse it.
+# Rounds start at 00:00, 06:00, 12:00 and 18:00 Singapore time and are scored on NEA's
+# reading stamped at that time, which averages the hour before. Photos must come from
+# that hour, and two cameras (Changi, Midview) only ever show "now", so the photos have
+# to be taken on time.
+#
+# GitHub often starts scheduled runs late (2 hours late on 18 Oct 2026), so this wakes
+# every 30 minutes. A run within 5 hours of the next round stays running: it waits for the
+# photo hour, takes the photos, waits for NEA's reading and publishes. Other runs queue
+# behind it and exit once that round is live. If every run somehow missed a round, the
+# first one in the 45 minutes after it starts rebuilds it from LTA's photo history.
 on:
   schedule:
-    - cron: "10,25,40 3,9,15,21 * * *"
-    # Catch-up runs 10 and 30 min after each round starts, in case every earlier run
-    # failed. They do nothing if the round is already live; otherwise they rebuild it from
-    # LTA's photo history for that hour (live-only cameras sit out) and the same reading.
-    - cron: "10,30 4,10,16,22 * * *"
+    - cron: "7,37 * * * *"
   workflow_dispatch:
     inputs:
       force:
-        description: "Retake photos even if this round is already live"
+        description: "Retake the nearest round's photos now, even if it's already live"
         type: boolean
         default: false
-  push:
-    branches: [main]
 
 permissions:
   contents: write
@@ -27,13 +26,13 @@ permissions:
   id-token: write
 
 concurrency:
-  group: pages
+  group: round
   cancel-in-progress: false
 
 jobs:
   round:
     runs-on: ubuntu-latest
-    timeout-minutes: 150
+    timeout-minutes: 345
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
@@ -42,10 +41,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Take snapshots
-        # A code push redeploys the live round as is; a manual run with force retakes it.
-        run: node scripts/snapshot.mjs ${{ github.event_name == 'push' && '--redeploy' || '' }} ${{ inputs.force && '--force' || '' }}
+      - id: snap
+        name: Take snapshots
+        run: node scripts/snapshot.mjs ${{ inputs.force && '--force' || '' }}
       - name: Save answer history
+        if: steps.snap.outputs.publish == 'true'
         run: |
           if ! git diff --quiet -- data/history.json; then
             git config user.name "hazedle-bot"
@@ -54,9 +54,12 @@ jobs:
             git commit -m "Round answers $(date -u +%FT%H:%MZ)"
             git pull --rebase && git push
           fi
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
+      - if: steps.snap.outputs.publish == 'true'
+        uses: actions/configure-pages@v5
+      - if: steps.snap.outputs.publish == 'true'
+        uses: actions/upload-pages-artifact@v3
         with:
           path: site
-      - id: deploy
+      - if: steps.snap.outputs.publish == 'true'
+        id: deploy
         uses: actions/deploy-pages@v4
