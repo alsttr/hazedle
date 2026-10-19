@@ -119,6 +119,12 @@ async function windy(id) {
 async function rtspme(id) {
   const ref = { Referer: `https://rtsp.me/embed/${id}/` };
   const embed = await getJSON(`https://rtsp.me/api/embed/${id}/token/`, { headers: ref });
+  // Not "ok" means rtsp.me won't serve the stream right now, e.g. "schedule": the camera's
+  // owner only allows viewing at certain hours (the Changi one isn't viewable around 5-6am).
+  if (embed.status !== 'ok' || !embed.url || !embed.token) {
+    const w = embed.window ? ` window ${JSON.stringify(embed.window)}` : '';
+    throw new Error(`rtsp.me says "${embed.status ?? 'unknown'}"${w}`);
+  }
   const stream = await getJSON(`${embed.url}/token/${embed.token}`, { headers: ref });
   const { buf, lastModified } = await getImage(stream.poster, ref);
   if (!lastModified) throw new Error('no Last-Modified, capture time unknown');
