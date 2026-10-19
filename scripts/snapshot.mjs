@@ -8,11 +8,10 @@
 //   inside the current clock hour, then waits for that hour's reading and scores
 //   against it. Every photo in a round was taken inside the hour its answer averages.
 //
-// Rounds last 6 hours and start 00:00, 06:00, 12:00 and 18:00 SGT. Every round is
-// scored on the reading stamped at its start, so the 6pm round (live 6pm-12am, the same
-// photos for everyone) uses photos from 5-6pm and NEA's 6pm reading. The job is
-// scheduled before the hour; if it runs late, LTA cameras come from LTA's history and
-// the live-only cameras sit the round out. If the live site already has the round
+// Rounds start at 12am, 8am, 12pm and 6pm SGT. Every round is scored on the reading
+// stamped at its start, so the 6pm round (live 6pm-12am, the same photos for everyone)
+// uses photos from 5-6pm and NEA's 6pm reading. If a run is ever late, LTA cameras come
+// from LTA's history and Midview from Windy's archive; only Changi has no history. If the live site already has the round
 // (e.g. a redeploy after a code change), its photos and answers are reused.
 
 import { mkdir, writeFile, readFile, appendFile } from 'node:fs/promises';
@@ -24,7 +23,9 @@ const LIVE = process.env.LIVE_URL || 'https://alsttr.github.io/hazedle/';
 const UA = { 'User-Agent': 'Mozilla/5.0 (Hazedle snapshot; +https://alsttr.github.io/hazedle/)' };
 const HOUR = 3600e3;
 const MIN = 60e3;
-const ROUND_HOURS = 6;
+// Rounds start at these SGT hours. The morning one is 8am, not 6am: Changi Sailing Club's
+// camera (the only public view of the east) isn't viewable before about 7am.
+const ROUND_STARTS = [0, 8, 12, 18];
 const SGT = 8 * HOUR;
 const FORCE = process.argv.includes('--force');
 const REDEPLOY = process.argv.includes('--redeploy'); // keep whatever round is live
@@ -32,6 +33,10 @@ const RETRY_EVERY = 2 * MIN; // re-poll a camera whose frame isn't inside the ho
 const PHOTO_CUTOFF = 1 * MIN; // stop trying for photos this long before the hour ends
 const READING_DEADLINE = 70 * MIN; // after the hour ends, give up waiting for NEA
 const MAX_LEAD = 5 * HOUR; // a run this close to the next round waits for it (jobs can run 6 h)
+// A run further out than MAX_LEAD sleeps until it's within it, then hands over to a fresh
+// run (started by the workflow), which then waits for the photo hour. This chain of runs,
+// each starting the next, is what keeps rounds on time; GitHub's own schedule has gone
+// 6 hours without firing.
 const LATE_GRACE = 45 * MIN; // after a round starts, still build it if nothing else did
 
 // Only cameras that look out to a horizon (not down at a road), so the haze is judgeable.
@@ -70,9 +75,18 @@ function orderFor(list, seed) {
 const REGIONS = ['north', 'south', 'east', 'west', 'central'];
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, Math.max(0, ms)));
+// Start of the round that is live at time t, and the start of the one after a given start.
 const windowStart = (t) => {
-  const sgt = t + SGT;
-  return sgt - (sgt % (ROUND_HOURS * HOUR)) - SGT;
+  const day = t + SGT - ((t + SGT) % (24 * HOUR)) - SGT; // SGT midnight
+  const h = Math.floor((t - day) / HOUR);
+  const startHour = [...ROUND_STARTS].reverse().find((x) => x <= h);
+  return day + startHour * HOUR;
+};
+const nextStart = (start) => {
+  const day = start + SGT - ((start + SGT) % (24 * HOUR)) - SGT;
+  const h = Math.round((start - day) / HOUR);
+  const nh = ROUND_STARTS.find((x) => x > h);
+  return nh != null ? day + nh * HOUR : day + (24 + ROUND_STARTS[0]) * HOUR;
 };
 const roundId = (start) => {
   const d = new Date(start + SGT);
@@ -109,12 +123,22 @@ async function lta(id, from, to) {
   const { buf } = await getImage(cam.image);
   return { buf, reportedAt: Date.parse(cam.timestamp), lag: 2 * MIN, source: late ? 'LTA history' : 'feed timestamp' };
 }
-async function windy(id) {
+// Upload times run 3-9 min after the clock burned into the frame (15:57 vs 16:01, 17:27 vs
+// 17:36 on 17 Oct 2026), so allow 15.
+const WINDY_LAG = 15 * MIN;
+async function windy(id, from, to) {
   const { buf, lastModified } = await getImage(`https://images-webcams.windy.com/${id.slice(-2)}/${id}/current/full/${id}.jpg`);
-  if (!lastModified) throw new Error('no Last-Modified, capture time unknown');
-  // Last-Modified is the upload time; the time burned into the frame has run 3-9 min
-  // earlier (15:57 vs 16:01, 17:27 vs 17:36 on 17 Oct 2026), so allow 15.
-  return { buf, reportedAt: lastModified, lag: 15 * MIN, source: 'Last-Modified' };
+  if (lastModified && lastModified - WINDY_LAG >= from && lastModified < to) {
+    return { buf, reportedAt: lastModified, lag: WINDY_LAG, source: 'Last-Modified' };
+  }
+  // Windy keeps ~24 h of frames (about one every 50 min): use one from inside the hour.
+  const archive = await getJSON(`https://node.windy.com/webcams/v3.0/archive/${id}?archiveType=day&imageSize=full`);
+  const hit = archive
+    .filter((f) => f.timestamp - WINDY_LAG >= from && f.timestamp < to)
+    .sort((a, b) => b.timestamp - a.timestamp)[0];
+  if (!hit) throw new Error(`no frame inside the hour, live or in Windy's archive (live is from ${lastModified ? sgtTime(lastModified) : '?'})`);
+  const img = await getImage(hit.url);
+  return { buf: img.buf, reportedAt: hit.timestamp, lag: WINDY_LAG, source: "Windy's archive" };
 }
 async function rtspme(id) {
   const ref = { Referer: `https://rtsp.me/embed/${id}/` };
@@ -223,23 +247,24 @@ async function setPublish(v) {
   if (process.env.GITHUB_OUTPUT) await appendFile(process.env.GITHUB_OUTPUT, `publish=${v}\n`);
 }
 
-// Which round this run should build, or null if it's too early (a later run will).
-// GitHub can start scheduled runs hours late, so the workflow wakes every 30 minutes and
-// whichever run gets here first simply waits in place until the photo hour comes round.
+// Which round this run should build, or null once it has waited its turn (the workflow
+// then starts a fresh run to carry on).
 async function pickRound() {
   const now = Date.now();
-  if (FORCE) return windowStart(now + (ROUND_HOURS / 2) * HOUR); // nearest round start
   const current = windowStart(now);
+  if (FORCE) return now - current < nextStart(current) - now ? current : nextStart(current); // nearest round start
   const live = await getJSON(new URL(`round/round.json?t=${now}`, LIVE)).catch(() => null);
   liveRound = live;
   // The current round never got built (every run was late): build it from history.
   if (!live || live.id < roundId(current)) {
     if (now < current + LATE_GRACE) return current;
   }
-  const next = current + ROUND_HOURS * HOUR;
-  if (live && live.id === roundId(next)) return null; // already done
+  const next = nextStart(current);
+  if (live && live.id === roundId(next)) return sleep(10 * MIN).then(() => null); // already done
   if (next - now > MAX_LEAD) {
-    console.log(`Next round (${roundId(next)}) is ${((next - now) / HOUR).toFixed(1)} h away; a later run will take it.`);
+    const wait = next - MAX_LEAD - now + MIN;
+    console.log(`Next round (${roundId(next)}) is ${((next - now) / HOUR).toFixed(1)} h away; waiting ${Math.round(wait / MIN)} min, then handing over to a fresh run.`);
+    await sleep(wait);
     return null;
   }
   return next;
@@ -272,7 +297,7 @@ async function main() {
   const round = {
     id,
     startsAt: new Date(start).toISOString(),
-    endsAt: new Date(start + ROUND_HOURS * HOUR).toISOString(),
+    endsAt: new Date(nextStart(start)).toISOString(),
     hourFrom: new Date(hourFrom).toISOString(),
     hourTo: new Date(stamp).toISOString(),
     readingAt: at,

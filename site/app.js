@@ -294,12 +294,17 @@
     el.sPlayed.textContent = done.length;
     el.sAvg.textContent = totals.length ? Math.round(totals.reduce((a, b) => a + b, 0) / totals.length) : 0;
     el.sBest.textContent = totals.length ? Math.max(...totals) : 0;
-    // Streak: consecutive 6-hour rounds played, ending with this one.
+    // Streak: consecutive rounds played, ending with this one.
     const ids = new Set(done.map(([k]) => k));
     let streak = 0, t = Date.parse(round.startsAt);
-    while (ids.has(idFor(t))) { streak++; t -= 6 * 3600e3; }
+    while (ids.has(idFor(t))) { streak++; t = prevStart(t); }
     el.sStreak.textContent = streak;
   }
+  const ROUND_STARTS = [0, 8, 12, 18]; // SGT hours; must match scripts/snapshot.mjs
+  const prevStart = (t) => {
+    do { t -= 3600e3; } while (!ROUND_STARTS.includes(new Date(t + 8 * 3600e3).getUTCHours()));
+    return t;
+  };
   const idFor = (t) => {
     const d = new Date(t + 8 * 3600e3);
     return d.toISOString().slice(0, 10) + '-' + String(d.getUTCHours()).padStart(2, '0');

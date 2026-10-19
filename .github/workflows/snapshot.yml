@@ -1,18 +1,17 @@
 name: New round
 
-# Rounds start at 00:00, 06:00, 12:00 and 18:00 Singapore time and are scored on NEA's
-# reading stamped at that time, which averages the hour before. Photos must come from
-# that hour, and two cameras (Changi, Midview) only ever show "now", so the photos have
-# to be taken on time.
+# Rounds start at 12am, 8am, 12pm and 6pm Singapore time and are scored on NEA's reading
+# stamped at that time, which averages the hour before. Photos must come from that hour,
+# and two cameras (Changi, Midview) only show "now", so the photos have to be taken on time.
 #
-# GitHub often starts scheduled runs late (2 hours late on 18 Oct 2026), so this wakes
-# every 30 minutes. A run within 5 hours of the next round stays running: it waits for the
-# photo hour, takes the photos, waits for NEA's reading and publishes. Other runs queue
-# behind it and exit once that round is live. If every run somehow missed a round, the
-# first one in the 45 minutes after it starts rebuilds it from LTA's photo history.
+# GitHub's schedule can't be trusted for that (it ran 2 h late, then skipped 6 h), so each
+# run starts the next one before it ends, keeping one run always waiting for the next round.
+# A run within 5 h of the next round waits for the photo hour, takes the photos, waits for
+# NEA's reading and publishes; one further out sleeps until it's within 5 h, then hands over.
+# The schedule below only restarts the chain if it ever breaks.
 on:
   schedule:
-    - cron: "7,37 * * * *"
+    - cron: "7,37 * * * *" # backup only; the chain above does the real work
   workflow_dispatch:
     inputs:
       force:
@@ -24,6 +23,7 @@ permissions:
   contents: write
   pages: write
   id-token: write
+  actions: write
 
 concurrency:
   group: round
@@ -63,3 +63,11 @@ jobs:
       - if: steps.snap.outputs.publish == 'true'
         id: deploy
         uses: actions/deploy-pages@v4
+      - name: Start the next run
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # After a failure, pause so a persistent error can't spin runs back to back.
+          if [ "${{ job.status }}" != "success" ]; then sleep 300; fi
+          gh workflow run snapshot.yml --repo "${{ github.repository }}"
