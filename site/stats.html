@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex">
+  <title>Hazedle Stats</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📊</text></svg>">
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css?v=7">
+  <style>
+    .app { max-width: 760px; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-top: 18px; }
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; }
+    .card b { display: block; font: 700 1.7rem/1.1 Fraunces, Georgia, serif; font-variant-numeric: tabular-nums; }
+    .card span { color: var(--muted); font-size: 0.78rem; }
+    h2 { font: 700 1.2rem Fraunces, Georgia, serif; margin: 28px 0 8px; }
+    .scroll { overflow-x: auto; background: var(--card); border: 1px solid var(--line); border-radius: 14px; }
+    table { border-collapse: collapse; width: 100%; font-size: 0.86rem; font-variant-numeric: tabular-nums; }
+    th, td { padding: 8px 10px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--line); }
+    th:first-child, td:first-child { text-align: left; }
+    th { color: var(--muted); font-weight: 600; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; }
+    tr:last-child td { border-bottom: 0; }
+    .note { color: var(--muted); font-size: 0.8rem; margin: 6px 2px 0; }
+    .two { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    @media (max-width: 560px) { .two { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header class="top">
+      <div>
+        <h1>Hazedle stats</h1>
+        <p class="sub" id="sub">Loading…</p>
+      </div>
+      <button class="icon-btn" id="refresh" aria-label="Refresh">↻</button>
+    </header>
+    <div id="out"></div>
+  </main>
+  <script>
+    (() => {
+      const API = 'https://edvmiplelrueckisnumm.supabase.co/rest/v1/rpc/hazedle_dashboard';
+      const KEY = 'sb_publishable_DLUL_VqHLWgCOmo2ANGwJQ_r6yJXhMz';
+      const key = new URLSearchParams(location.hash.slice(1)).get('k');
+      const $ = (id) => document.getElementById(id);
+      const n = (v) => (v == null ? '–' : Number(v).toLocaleString('en-SG'));
+      const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+      const day = (d) => new Date(d + 'T00:00:00+08:00').toLocaleDateString('en-SG', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Asia/Singapore' });
+      const roundName = (id) => {
+        const [y, m, d, h] = id.split('-');
+        const hr = +h === 0 ? '12am' : +h < 12 ? `${+h}am` : +h === 12 ? '12pm' : `${h - 12}pm`;
+        return `${day(`${y}-${m}-${d}`)}, ${hr}`;
+      };
+      const SRC = { x: 'X (Twitter)', copy: 'Copied link', native: 'Phone share sheet', direct: 'No share link' };
+
+      async function load() {
+        if (!key) { $('sub').textContent = 'This page needs its private link (with #k=…).'; return; }
+        $('sub').textContent = 'Loading…';
+        try {
+          const r = await fetch(API, { method: 'POST', headers: { apikey: KEY, 'Content-Type': 'application/json' }, body: JSON.stringify({ p_key: key }) });
+          if (!r.ok) throw new Error(r.status === 400 ? 'That link’s key isn’t valid.' : 'Couldn’t load stats (' + r.status + ').');
+          render(await r.json());
+        } catch (e) {
+          $('sub').textContent = e.message;
+        }
+      }
+
+      function render(d) {
+        const t = d.totals;
+        const since = t.tracking_since
+          ? new Date(t.tracking_since).toLocaleString('en-SG', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Singapore' })
+          : 'the next visit';
+        $('sub').textContent = `Updated ${new Date().toLocaleTimeString('en-SG', { hour: 'numeric', minute: '2-digit' })} SGT · games since 17 Oct · visits & shares since ${since}`;
+        const today = d.days[0] || {};
+        $('out').innerHTML = `
+          <div class="cards">
+            <div class="card"><b>${n(today.players)}</b><span>players today</span></div>
+            <div class="card"><b>${n(t.players)}</b><span>players all-time</span></div>
+            <div class="card"><b>${n(t.games)}</b><span>games finished</span></div>
+            <div class="card"><b>${n(t.shares)}</b><span>shares</span></div>
+            <div class="card"><b>${n(t.click_ins)}</b><span>visits from shared links</span></div>
+          </div>
+
+          <h2>By day</h2>
+          <div class="scroll"><table>
+            <tr><th>Day (SGT)</th><th>Visitors</th><th>Started</th><th>Finished</th><th>Games</th><th>Avg score</th><th>Shared on X</th><th>Copied</th><th>Share sheet</th><th>Clicked in</th></tr>
+            ${d.days.map((x) => `<tr><td>${day(x.day)}</td><td>${n(x.visitors)}</td><td>${n(x.started)}</td><td>${n(x.players)}</td><td>${n(x.games)}</td><td>${n(x.avg_score)}</td><td>${n(x.share_x)}</td><td>${n(x.share_copy)}</td><td>${n(x.share_native)}</td><td>${n(x.click_ins)}</td></tr>`).join('')}
+          </table></div>
+          <p class="note">Visitors, Started, Finished = different people (one per device). Games = rounds finished. Clicked in = visits that came from a shared Hazedle link.</p>
+
+          <div class="two">
+            <div>
+              <h2>Where visits came from</h2>
+              <div class="scroll"><table>
+                <tr><th>Link</th><th>Visits</th></tr>
+                ${d.click_sources.map((s) => `<tr><td>${esc(SRC[s.src] || s.src)}</td><td>${n(s.visits)}</td></tr>`).join('') || '<tr><td>None yet</td><td></td></tr>'}
+              </table></div>
+            </div>
+            <div>
+              <h2>Referring sites</h2>
+              <div class="scroll"><table>
+                <tr><th>Site</th><th>Visits</th></tr>
+                ${d.referrers.map((s) => `<tr><td>${esc(s.ref_host)}</td><td>${n(s.visits)}</td></tr>`).join('') || '<tr><td>None yet</td><td></td></tr>'}
+              </table></div>
+            </div>
+          </div>
+
+          <h2>By round</h2>
+          <div class="scroll"><table>
+            <tr><th>Round</th><th>Players</th><th>Avg score</th><th>Best</th></tr>
+            ${d.rounds.map((x) => `<tr><td>${roundName(x.round_id)}</td><td>${n(x.players)}</td><td>${n(x.avg_score)}</td><td>${n(x.best)}</td></tr>`).join('')}
+          </table></div>`;
+      }
+
+      $('refresh').addEventListener('click', load);
+      load();
+    })();
+  </script>
+</body>
+</html>

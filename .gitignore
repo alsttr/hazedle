@@ -1,3 +1,4 @@
 site/round/
 .claude/
 .DS_Store
+.secrets/

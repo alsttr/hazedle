@@ -73,6 +73,30 @@
     return pick(g > a ? LINES.wayOver : LINES.wayUnder, seed);
   };
 
+  // Usage stats (visits, starts, shares); fire and forget, never blocks the game.
+  function track(type, extra = {}) {
+    try {
+      fetch(API + 'hazedle_track', {
+        method: 'POST',
+        keepalive: true,
+        headers: { apikey: API_KEY, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ p_player: store.player, p_round: round ? round.id : null, p_type: type, ...extra }),
+      }).catch(() => {});
+    } catch {}
+  }
+  // How this visit arrived: ?s= from a shared Hazedle link, plus the referring site.
+  const arrival = (() => {
+    const q = new URLSearchParams(location.search);
+    const src = q.get('s');
+    if (src) {
+      q.delete('s');
+      try { history.replaceState(null, '', location.pathname + (q.toString() ? '?' + q : '') + location.hash); } catch {}
+    }
+    let ref = null;
+    try { const h = new URL(document.referrer).hostname; if (h && h !== location.hostname) ref = h; } catch {}
+    return { p_src: src, p_ref: ref };
+  })();
+
   async function rpc(fn, body) {
     const r = await fetch(API + fn, {
       method: 'POST',
@@ -335,23 +359,28 @@
   // ---- sharing ----
   // Colours only: no numbers and no too-high/too-low hints, so it doesn't spoil the round.
   const gridText = () => REGIONS.map((r) => EMOJI[tier(score(rs.guesses[r], answers[r]))]).join('');
-  const shareText = () =>
+  // The link carries ?s=<how it was shared>, so a visit from it counts as a click-in.
+  const shareText = (via) =>
     `🌫️ Hazedle · ${dayName(round.startsAt, false)} ${hourName(round.startsAt)} round\n` +
     `${rs.total}/500${betterThan != null ? ` · better than ${betterThan}% of players` : ''}\n` +
     `${gridText()}\n` +
-    `#Hazedle ${URL_SELF.replace(/^https?:\/\//, '')}`;
+    `#Hazedle ${URL_SELF.replace(/^https?:\/\//, '')}?s=${via}`;
 
   function tweet() {
-    window.open('https://x.com/intent/post?text=' + encodeURIComponent(shareText()), '_blank', 'noopener');
+    track('share_x');
+    window.open('https://x.com/intent/post?text=' + encodeURIComponent(shareText('x')), '_blank', 'noopener');
   }
   async function share() {
-    const text = shareText();
+    const native = navigator.share && matchMedia('(pointer: coarse)').matches;
+    const text = shareText(native ? 'native' : 'copy');
     try {
-      if (navigator.share && matchMedia('(pointer: coarse)').matches) {
+      if (native) {
         await navigator.share({ text });
+        track('share_native');
         return;
       }
       await navigator.clipboard.writeText(text);
+      track('share_copy');
       el.toast.textContent = 'Copied! Paste it anywhere.';
     } catch (e) {
       if (e && e.name === 'AbortError') return;
@@ -384,6 +413,7 @@
       return;
     }
     el.roundLabel.textContent = roundName(round);
+    track('visit', arrival);
     rs = store.rounds[round.id] ||= { step: 0, guesses: {} };
     // Keep storage small: last 200 rounds is ~50 days.
     const keys = Object.keys(store.rounds).sort();
@@ -402,7 +432,7 @@
   }
 
   // ---- events ----
-  el.startBtn.addEventListener('click', beginGame);
+  el.startBtn.addEventListener('click', () => { track('start'); beginGame(); });
   el.slider.addEventListener('input', () => setGuess(+el.slider.value));
   document.querySelectorAll('.nudge').forEach((b) => b.addEventListener('click', () => setGuess(rs.draft + +b.dataset.d)));
   el.lockBtn.addEventListener('click', lockIn);
