@@ -664,5 +664,23 @@
    "west": "Tuas Second Link",
    "central": "Sin Ming (Midview City)"
   }
+ },
+ {
+  "id": "2026-10-26-18",
+  "readingAt": "2026-10-26T18:00:00+08:00",
+  "pm25": {
+   "north": 35,
+   "south": 28,
+   "east": 38,
+   "west": 40,
+   "central": 29
+  },
+  "places": {
+   "north": "Woodlands Causeway",
+   "south": "Sentosa Gateway, towards Mount Faber",
+   "east": "Changi Sailing Club",
+   "west": "Tuas Second Link",
+   "central": "Sin Ming (Midview City)"
+  }
  }
 ]
