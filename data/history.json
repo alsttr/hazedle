@@ -844,5 +844,23 @@
    "west": "Tuas Checkpoint",
    "central": "Sin Ming (Midview City)"
   }
+ },
+ {
+  "id": "2026-10-29-08",
+  "readingAt": "2026-10-29T08:00:00+08:00",
+  "pm25": {
+   "north": 38,
+   "south": 21,
+   "east": 35,
+   "west": 34,
+   "central": 35
+  },
+  "places": {
+   "north": "Woodlands Checkpoint",
+   "south": "Sentosa Gateway, towards Mount Faber",
+   "east": "Changi Sailing Club",
+   "west": "Tuas Checkpoint",
+   "central": "Sin Ming (Midview City)"
+  }
  }
 ]
