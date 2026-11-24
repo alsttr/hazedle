@@ -2734,5 +2734,23 @@
    "west": "Tuas Second Link",
    "central": "Sin Ming (Midview City)"
   }
+ },
+ {
+  "id": "2026-11-24-12",
+  "readingAt": "2026-11-24T12:00:00+08:00",
+  "pm25": {
+   "north": 4,
+   "south": 8,
+   "east": 8,
+   "west": 10,
+   "central": 8
+  },
+  "places": {
+   "north": "Woodlands Causeway",
+   "south": "Sentosa Gateway, towards Mount Faber",
+   "east": "Camera offline",
+   "west": "Tuas Checkpoint",
+   "central": "Sin Ming (Midview City)"
+  }
  }
 ]
